@@ -17,14 +17,15 @@ class Computer
       2 => {:word => :mult, :inc => 4},
       3 => {:word => :in, :inc => 2},
       4 => {:word => :out, :inc => 2},
-      5 => {:word => :jnz, :inc => 0},
-      6 => {:word => :jz, :inc => 0},
+      5 => {:word => :jnz, :inc => 3},
+      6 => {:word => :jz, :inc => 3},
       7 => {:word => :lt, :inc => 4},
       8 => {:word => :eq, :inc => 4},
-      99 => {:word => :halt},
+      99 => {:word => :halt, :inc => 0},
     }.freeze
   end
 
+  # Easy way to reference the tape, given a mode (0 = reference, 1 = value)
   def t(index, mode)
     mode == 0 ? @tape[index] : index
   end
@@ -58,6 +59,10 @@ class Computer
       a0, a1, a2 = [@tape[@pc+1], @tape[@pc+2], @tape[@pc+3]]
       r0, r1 = [mode & 1, mode & 2]
       
+      # We increment this so so that commands that require a return (`out`) 
+      # can still advance the pointer. It also makes jnz and jz tidier
+      @pc += command[:inc]
+
       # Each command maps to a symbol (listed above).
       # For each command, we use our custom tape[] method, which lets us
       # easily specify whether it's by reference or by value.
@@ -69,58 +74,47 @@ class Computer
         when :add then @tape[a2] = t(a0, r0) + t(a1, r1)
         when :mult then @tape[a2] = t(a0, r0) * t(a1, r1)
         when :in then @tape[a0] = get_next_mock_input || (puts "INPUT: "; gets.chomp.to_i)
-        when :out 
-          # We need to increment this here since we return below
-          @pc += command[:inc]
-          return {value: t(a0, r0)}
-        when :jnz then @pc = (t(a0, r0) != 0) ? t(a1, r1) : (@pc + 3)
-        when :jz then @pc = (t(a0, r0) == 0) ? t(a1, r1) : (@pc + 3)
+        when :out then return {value: t(a0, r0)}
+        when :jnz then @pc = t(a1, r1) if t(a0, r0) != 0
+        when :jz then @pc = t(a1, r1) if t(a0, r0) == 0
         when :lt then @tape[a2] = (t(a0, r0) < t(a1, r1)) ? 1 : 0
         when :eq then @tape[a2] = (t(a0, r0) == t(a1, r1)) ? 1 : 0
         when :halt then return {halted: true}
       end
-      @pc += command[:inc]
+      # @pc += command[:inc]
     end
   end
 
+  # Get the next value from the mock input ticker and advance that pointer.
+  # This pointer will be reset on each new run (since each run has its)
+  # own inputs
   def get_next_mock_input
     @mock_input_index += 1
     @mock_input_tape[@mock_input_index-1]
   end
-
 end
 
 def run_and_carry(code, num_iterations, phase_settings, initial_value)
-  halted = false
-  computer_number = 0
   iteration_count = 0
   output = initial_value
-  first_run = true
 
   # This lets each machine have its own state.
   computers = Array.new(phase_settings.length).map { |_| Computer.new(code) }
 
   # TODO: Replace with (0..iteration_count).each for cleaner code
-  while (iteration_count += 1) <= num_iterations && !halted
-    puts "computer_number: #{computer_number}"
+  while iteration_count < num_iterations
+    computer_number = iteration_count % computers.length
     computer = computers[computer_number]
     inputs = computer.has_run? ? [output] : [phase_settings[computer_number], output]
-    puts "inputs: #{inputs}"
+    
+    # Run using the given inputs (resuming from when it last returned) and get
+    # the resulting value and the halted state.
     result = computer.run(inputs)
-
     output = result[:value] if result[:value]
-    halted = result[:halted]
-
-    puts "result: #{result}"
-    # gets
-
-    if (output.nil? || halted)
-      puts "HALTED: result: #{output}"
-      # gets
-    end
-
+    return output if result[:halted]
+      
     # Move to the next iteration
-    computer_number = (computer_number + 1) % computers.length
+    iteration_count += 1
   end
   output
 end
