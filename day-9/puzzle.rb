@@ -38,12 +38,10 @@ class Computer
     end
   end
 
+  # Easy write command
   def w(index, value, mode)
-    # We default the mode to 0, since it's often implicitly set to 0 (so it's passed
-    # in as nil)
-    mode ||= 0
-
-    case mode
+    # We default the mode to 0, since it's often implicitly set to 0 (so it's passed in as nil)
+    case (mode || 0)
       when 0 then @tape[index] = value
       when 2 then @tape[index + @mem_offset] = value  
     end
@@ -71,12 +69,13 @@ class Computer
       end
 
       # Shorthand for the arguments and reference flags.
-      # I'm okay with this approach, since we have 3 or fewer for all instructions.
       # 
-      # Since we always have (at most) 2 inputs and the output is never by
-      # reference, we can use r0 and r1 for the flags.
-      a0, a1, a2 = @tape[@pc+1..@pc+command[:inc]]
-      r0, r1, r2 = mode.to_s.reverse.split('').map(&:to_i)
+      # I'm not a fan of the way we fetch the mode values. There has to be
+      # a way of parsing this that doesn't involve strings, but since we'd
+      # need to do some math anyways, this may actually be faster.
+      a = @tape[@pc+1..@pc+command[:inc]]
+      r = mode.to_s.reverse.split('').map(&:to_i)
+
       # We increment this so so that commands that require a return (`out`) 
       # can still advance the pointer. It also makes jnz and jz tidier
       @pc += command[:inc]
@@ -88,17 +87,16 @@ class Computer
       # To make by-reference checks easier, we use bit masks to check the mode.
       #   e.g. if input 2 is by reference, it would by X1X which maps to N!=0
       #   since X1X & 010 (2) == 010 != 0
-      # puts "command: #{command}, #{instruction} args:(#{a0}, #{a1}, #{a2}) modes:(#{r0}, #{r1}, #{r2}) | #{mode}"
       case command[:word]
-        when :add then w(a2, r(a0, r0) + r(a1, r1), r2)
-        when :mult then w(a2, r(a0, r0) * r(a1, r1), r2)
-        when :in then w(a0, get_next_mock_input || (puts "INPUT: "; gets.chomp.to_i), r0)
-        when :out then puts "OUTPUT: #{r(a0, r0)}"
-        when :jnz then @pc = r(a1, r1) if r(a0, r0) != 0
-        when :jz then @pc = r(a1, r1) if r(a0, r0) == 0
-        when :lt then w(a2, (r(a0, r0) < r(a1, r1)) ? 1 : 0, r2)
-        when :eq then w(a2, (r(a0, r0) == r(a1, r1)) ? 1 : 0, r2)
-        when :mem then @mem_offset += r(a0, r0)
+        when :add then w(a[2], r(a[0], r[0]) + r(a[1], r[1]), r[2])
+        when :mult then w(a[2], r(a[0], r[0]) * r(a[1], r[1]), r[2])
+        when :in then w(a[0], get_next_mock_input || (puts "INPUT: "; gets.chomp.to_i), r[0])
+        when :out then puts "OUTPUT: #{r(a[0], r[0])}"
+        when :jnz then @pc = r(a[1], r[1]) if r(a[0], r[0]) != 0
+        when :jz then @pc = r(a[1], r[1]) if r(a[0], r[0]) == 0
+        when :lt then w(a[2], (r(a[0], r[0]) < r(a[1], r[1])) ? 1 : 0, r[2])
+        when :eq then w(a[2], (r(a[0], r[0]) == r(a[1], r[1])) ? 1 : 0, r[2])
+        when :mem then @mem_offset += r(a[0], r[0])
         when :halt then return puts "HALT"
       end
     end
@@ -115,10 +113,14 @@ end
 
 def part_1
   Computer.new(input).run([1])
-  # Computer.new(sample_1).run
-  # Computer.new(sample_2).run
-  # Computer.new(sample_3).run
+end
+
+def part_2
+  Computer.new(input).run([2])
 end
 
 # 2932210790
 part_1
+
+# 73144
+part_2
